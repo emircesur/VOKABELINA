@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vokabelina Admin</title>
+<style>
+  :root { --bg:#fff8ef; --card:#fff; --ink:#2d2a26; --mute:#7a7268; --brand:#e8832a; --ok:#2e9e5b; --bad:#d64545; --line:#eadfce; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1b1815; --card:#26221e; --ink:#f3ece2; --mute:#a99f92; --line:#3a342d; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  main { max-width:960px; margin:0 auto; padding:16px 16px 80px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--mute); margin:8px 0 3px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); font:inherit; }
+  textarea { min-height:80px; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; }
+  button { padding:8px 14px; border:0; border-radius:9px; background:var(--brand); color:#fff; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .card { border:1px dashed var(--line); border-radius:12px; padding:12px; margin-bottom:10px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:var(--line); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .stat b { display:block; font-size:22px; }
+  #login { max-width:380px; margin:12vh auto; }
+</style>
+</head>
+<body>
+<header><span style="font-size:26px">🥨</span><h1>Vokabelina Admin</h1><span id="status" class="pill"></span><button class="ghost" id="logout" hidden>Log out</button></header>
+<main id="login"><section>
+  <h2>Admin token</h2>
+  <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password">
+  <p style="margin-top:12px"><button id="go">Sign in</button> <span id="loginErr" class="bad"></span></p>
+</section></main>
+<main id="app" hidden>
+  <section><h2>Overview</h2><div class="stats" id="stats"></div>
+    <p><button class="ghost" id="export">Download fine-tune dataset (👍 chats, JSONL)</button></p></section>
+  <section><h2>AI providers</h2>
+    <p style="color:var(--mute)">Keys are stored on the server only and never sent to the app. Leave a masked key untouched to keep it. “OpenAI-compatible” also covers OpenRouter, Groq, DeepSeek, Together, Ollama, vLLM… (set a base URL).</p>
+    <div id="providers"></div><button class="ghost" id="addProvider">+ Add provider</button></section>
+  <section><h2>Routing per task</h2><div id="routes"></div></section>
+  <section><h2>News sources (RSS)</h2><div id="feeds"></div><button class="ghost" id="addFeed">+ Add source</button></section>
+  <section><h2>Limits &amp; prompt</h2>
+    <div class="row"><div><label>Max tokens per reply</label><input id="maxTokens" type="number"></div>
+    <div><label>Requests / minute / device</label><input id="rate" type="number"></div>
+    <div><label>AI calls / minute (all devices)</label><input id="grate" type="number"></div>
+    <div><label>AI calls / day (all devices)</label><input id="daily" type="number"></div></div>
+    <label>Extra system prompt (appended to every task — tone, safety, house rules)</label><textarea id="extra"></textarea></section>
+  <p><button id="save">Save changes</button> <span id="saveMsg"></span></p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let cfg = null;
+const tok = () => sessionStorage.getItem('adm') || '';
+async function api(path, opt = {}) {
+  const r = await fetch(path, { ...opt, headers: { authorization: 'Bearer ' + tok(), 'content-type': 'application/json', ...(opt.headers || {}) } });
+  if (r.status === 401) { sessionStorage.removeItem('adm'); location.reload(); }
+  return r;
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+$('#go').onclick = async () => {
+  sessionStorage.setItem('adm', $('#token').value.trim());
+  const r = await fetch('/admin/api/config', { headers: { authorization: 'Bearer ' + tok() } });
+  if (r.ok) start(await r.json()); else $('#loginErr').textContent = r.status === 503 ? 'Admin disabled: set ADMIN_TOKEN on the server' : 'Wrong token';
+};
+$('#logout').onclick = () => { sessionStorage.removeItem('adm'); location.reload(); };
+
+async function start(c) {
+  cfg = c; $('#login').hidden = true; $('#app').hidden = false; $('#logout').hidden = false;
+  render(); loadStats();
+}
+async function loadStats() {
+  const s = await (await api('/admin/api/stats')).json();
+  $('#status').textContent = s.aiConfigured ? 'AI ready' : 'No AI key set';
+  $('#status').className = 'pill ' + (s.aiConfigured ? 'ok' : 'bad');
+  const items = [['Requests', s.requestsSinceStart], ['Errors', s.errorsSinceStart], ['Active devices', s.activeDevicesSinceStart], ['Chats logged', s.chatsLogged], ['👍', s.thumbsUp], ['👎', s.thumbsDown]];
+  $('#stats').innerHTML = items.map(([k, v]) => `<div class="stat"><b>${v}</b>${k}</div>`).join('');
+}
+function render() {
+  $('#providers').innerHTML = cfg.providers.map((p, i) => `
+    <div class="card"><div class="row">
+      <div><label>Name</label><input data-p="${i}" data-k="name" value="${esc(p.name)}"></div>
+      <div><label>ID (used by routes)</label><input data-p="${i}" data-k="id" value="${esc(p.id)}"></div>
+      <div><label>Type</label><select data-p="${i}" data-k="kind">${['anthropic','openai','gemini'].map(k => `<option value="${k}" ${p.kind===k?'selected':''}>${k==='openai'?'openai (compatible)':k}</option>`).join('')}</select></div>
+      <div><label>Base URL (optional)</label><input data-p="${i}" data-k="baseUrl" value="${esc(p.baseUrl)}" placeholder="default"></div>
+      <div><label>API key ${p.hasKey ? '<span class="ok">● set</span>' : '<span class="bad">● missing</span>'}</label><input data-p="${i}" data-k="apiKey" type="password" value="${esc(p.apiKey)}" autocomplete="off"></div>
+      <div><label>Enabled</label><select data-p="${i}" data-k="enabled"><option value="true" ${p.enabled?'selected':''}>yes</option><option value="false" ${!p.enabled?'selected':''}>no</option></select></div>
+    </div><p><button class="ghost" onclick="testP(${i})">Test connection</button> <button class="ghost" onclick="delP(${i})">Remove</button> <span id="t${i}"></span></p></div>`).join('');
+  const opts = (sel) => `<option value="">— none —</option>` + cfg.providers.map(p => `<option value="${esc(p.id)}" ${p.id===sel?'selected':''}>${esc(p.name)}</option>`).join('');
+  $('#routes').innerHTML = cfg.routes.map((r, i) => `
+    <div class="card"><b>${esc(r.task)}</b><div class="row">
+      <div><label>Provider</label><select data-r="${i}" data-k="providerId">${opts(r.providerId)}</select></div>
+      <div><label>Model</label><input data-r="${i}" data-k="model" value="${esc(r.model)}"></div>
+      <div><label>Fallback provider</label><select data-r="${i}" data-k="fallbackProviderId">${opts(r.fallbackProviderId)}</select></div>
+      <div><label>Fallback model</label><input data-r="${i}" data-k="fallbackModel" value="${esc(r.fallbackModel)}"></div>
+    </div></div>`).join('');
+  $('#feeds').innerHTML = cfg.feeds.map((f, i) => `
+    <div class="card"><div class="row">
+      <div><label>Name</label><input data-f="${i}" data-k="name" value="${esc(f.name)}"></div>
+      <div style="grid-column:span 2"><label>RSS URL</label><input data-f="${i}" data-k="url" value="${esc(f.url)}"></div>
+      <div><label>Enabled</label><select data-f="${i}" data-k="enabled"><option value="true" ${f.enabled?'selected':''}>yes</option><option value="false" ${!f.enabled?'selected':''}>no</option></select></div>
+    </div><p><button class="ghost" onclick="delF(${i})">Remove</button></p></div>`).join('');
+  $('#maxTokens').value = cfg.maxTokens; $('#rate').value = cfg.rateLimitPerMinute; $('#grate').value = cfg.globalAiPerMinute; $('#daily').value = cfg.dailyAiLimit; $('#extra').value = cfg.extraSystemPrompt;
+}
+document.addEventListener('input', e => {
+  const t = e.target, k = t.dataset.k; if (!k) return;
+  const v = t.tagName === 'SELECT' && (t.value === 'true' || t.value === 'false') ? t.value === 'true' : t.value;
+  if (t.dataset.p !== undefined) cfg.providers[+t.dataset.p][k] = v;
+  if (t.dataset.r !== undefined) cfg.routes[+t.dataset.r][k] = v;
+  if (t.dataset.f !== undefined) cfg.feeds[+t.dataset.f][k] = v;
+});
+$('#addProvider').onclick = () => { cfg.providers.push({ id: 'custom' + (cfg.providers.length + 1), name: 'Custom', kind: 'openai', baseUrl: '', apiKey: '', enabled: true }); render(); };
+$('#addFeed').onclick = () => { cfg.feeds.push({ name: '', url: '', enabled: true }); render(); };
+window.delP = i => { cfg.providers.splice(i, 1); render(); };
+window.delF = i => { cfg.feeds.splice(i, 1); render(); };
+window.testP = async i => {
+  const el = $('#t' + i); el.textContent = 'testing… (save first if you changed the key)';
+  const p = cfg.providers[i];
+  const route = cfg.routes.find(r => r.providerId === p.id);
+  const r = await (await api(`/admin/api/test/${encodeURIComponent(p.id)}?model=${encodeURIComponent(route?.model || '')}`, { method: 'POST' })).json();
+  el.innerHTML = r.ok ? `<span class="ok">✓ ${esc(r.model)} replied in ${r.ms} ms</span>` : `<span class="bad">✗ ${esc(r.error)}</span>`;
+};
+$('#save').onclick = async () => {
+  cfg.maxTokens = +$('#maxTokens').value; cfg.rateLimitPerMinute = +$('#rate').value; cfg.globalAiPerMinute = +$('#grate').value; cfg.dailyAiLimit = +$('#daily').value; cfg.extraSystemPrompt = $('#extra').value;
+  const r = await api('/admin/api/config', { method: 'PUT', body: JSON.stringify(cfg) });
+  if (r.ok) { cfg = await r.json(); render(); loadStats(); $('#saveMsg').innerHTML = '<span class="ok">Saved ✓</span>'; } else $('#saveMsg').innerHTML = '<span class="bad">Save failed</span>';
+  setTimeout(() => $('#saveMsg').textContent = '', 3000);
+};
+$('#export').onclick = async () => {
+  const b = await (await api('/admin/api/export.jsonl')).blob();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'vokabelina-finetune.jsonl'; a.click();
+};
+if (tok()) fetch('/admin/api/config', { headers: { authorization: 'Bearer ' + tok() } }).then(async r => { if (r.ok) start(await r.json()); });
+</script>
+</body>
+</html>

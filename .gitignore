@@ -1,0 +1,7 @@
+.dart_tool/
+build/
+.flutter-plugins*
+backend/data/
+*.iml
+.idea/
+.DS_Store
