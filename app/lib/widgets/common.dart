@@ -51,26 +51,31 @@ class StatChip extends StatelessWidget {
   }
 }
 
-/// A word with gloss; the trailing button adds it to the deck (or shows a check if present).
+/// A word in the target language with its meaning; the trailing button adds it
+/// to the deck (or shows a check if present). Tapping the picture opens the card.
 class WordRow extends ConsumerWidget {
-  const WordRow({super.key, required this.word, this.onSpeak});
+  const WordRow({super.key, required this.word, this.onSpeak, this.onOpen});
   final Word word;
   final VoidCallback? onSpeak;
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final lang = ref.watch(profileProvider.select((p) => p.nativeLang));
-    final inDeck = ref.watch(deckProvider.select((d) => d.cards.containsKey(word.id)));
+    final p = ref.watch(profileProvider);
+    final inDeck = ref.watch(deckProvider.select((d) => d.has(p.targetLang, word.id)));
+    final title = word.inLang(p.targetLang).isEmpty ? word.de : word.inLang(p.targetLang);
+    final gloss = word.gloss(p.nativeLang);
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      title: Text(word.de, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-      subtitle: Text(word.gloss(lang).isEmpty ? word.en : word.gloss(lang)),
+      leading: word.emoji.isEmpty ? null : GestureDetector(onTap: onOpen, child: Text(word.emoji, style: const TextStyle(fontSize: 26))),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+      subtitle: gloss == title ? null : Text(gloss),
       onTap: onSpeak,
       trailing: inDeck
           ? const Icon(Icons.check_circle, color: Colors.green)
           : IconButton(
-              tooltip: ref.t('Add to my cards', 'Kartlarıma ekle'),
+              tooltip: ref.t('Add to my cards', 'Kartlarıma ekle', 'Zu meinen Karten'),
               icon: const Icon(Icons.add_circle_outline),
               onPressed: () {
                 ref.read(deckProvider.notifier).add([word]);

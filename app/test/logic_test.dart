@@ -113,12 +113,23 @@ void main() {
         'der_tisch': CardState(wordId: 'der_tisch')..reps = 4..intervalDays = 20..successes = 4,
         'der_stuhl': CardState(wordId: 'der_stuhl')..successes = 0..failures = 3..reps = 1,
       };
-      final l = Learner(words(), cards, const LearnerMemory(facts: ['likes football'], mistakes: {'dative after mit': 3}));
+      final now = DateTime(2026, 10, 22);
+      final mem = LearnerMemory(
+        facts: [MemoryFact(text: 'likes football', firstSeen: now, lastSeen: now)],
+        mistakes: {'de|dative': MistakePattern(lang: 'de', tag: 'dative', explanation: 'mit + Dativ', examples: ['mit der Bus → mit dem Bus'], count: 3, lastSeen: now)},
+        interests: ['football'],
+      );
+      final l = Learner(words(), cards, mem, lang: 'de', now: now);
       final p = l.toPayload();
       expect(p['known'], ['der Tisch']);
       expect(p['weak'], ['der Stuhl']);
-      expect(p['mistakes'], ['dative after mit']);
+      expect(p['mistakes'], ['dative: mit + Dativ (e.g. mit der Bus → mit dem Bus)']);
       expect(p['facts'], ['likes football']);
+      expect(p['interests'], ['football']);
+      // the same deck seen by an English learner uses English words
+      final en = Learner(words(), {for (final c in cards.values) c.wordId: c}, mem, lang: 'en', now: now);
+      expect(en.toPayload()['known'], ['table']);
+      expect(en.toPayload()['mistakes'], isEmpty);
     });
 
     test('trackedWordIdsIn matches lemmas and verbs case-insensitively', () {
@@ -129,3 +140,4 @@ void main() {
     });
   });
 }
+

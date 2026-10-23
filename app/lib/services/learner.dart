@@ -2,14 +2,19 @@ import 'dart:math';
 
 import '../data/models.dart';
 
-/// Learner model: turns SRS state + chat memory into the "memory" payload the AI
-/// tutor receives, and decides which words the tutor should practise next.
+/// Learner model for one target language: turns SRS state + long-term memory
+/// into the "memory" payload the AI receives, and decides which words the tutor
+/// should practise next.
 class Learner {
-  Learner(this.words, this.cards, this.memory);
+  Learner(this.words, this.cards, this.memory, {this.lang = 'de', DateTime? now}) : now = now ?? DateTime.now();
 
   final Map<String, Word> words;
+
+  /// Cards of [lang] keyed by word id.
   final Map<String, CardState> cards;
   final LearnerMemory memory;
+  final String lang;
+  final DateTime now;
 
   List<Word> get known => [
         for (final c in cards.values)
@@ -18,7 +23,7 @@ class Learner {
 
   /// Thompson sampling over each started word's success rate: words we are
   /// *uncertain or weak* about get sampled low and are picked first. This is the
-  /// explore/exploit policy that decides what the tutor weaves into the chat.
+  /// explore/exploit policy that decides what the tutor and practice sessions use.
   List<Word> pickWeak(int n, {Random? rng}) {
     final r = rng ?? Random();
     final scored = <(double, Word)>[];
@@ -33,28 +38,50 @@ class Learner {
     return [for (final s in scored.take(n)) s.$2];
   }
 
-  /// Estimated CEFR-ish progress 0..1 inside the current level (for the UI ring).
+  /// Share of [level] catalogue words that are known (0..1).
   double levelProgress(String level) {
-    final inLevel = words.values.where((w) => w.level == level).toList();
+    final inLevel = words.values.where((w) => w.level == level && !w.custom).toList();
     if (inLevel.isEmpty) return 0;
     final knownCount = inLevel.where((w) => cards[w.id]?.isKnown ?? false).length;
     return knownCount / inLevel.length;
   }
 
+  /// What the AI gets about the learner (compact, ranked, language-specific).
   Map<String, dynamic> toPayload() => {
-        'known': [for (final w in known.take(60)) w.de],
-        'weak': [for (final w in pickWeak(6)) w.de],
-        'mistakes': memory.topMistakes(),
-        'facts': memory.facts.take(15).toList(),
+        'known': [for (final w in known.take(60)) w.inLang(lang)],
+        'weak': [for (final w in pickWeak(6)) w.inLang(lang)],
+        'mistakes': [
+          for (final m in memory.topMistakes(lang, now, 6)) m.examples.isEmpty ? '${m.tag}: ${m.explanation}' : '${m.tag}: ${m.explanation} (e.g. ${m.examples.first})'
+        ],
+        'facts': [for (final f in (memory.facts.toList()..sort((a, b) => b.lastSeen.compareTo(a.lastSeen))).take(15)) f.text],
+        'interests': memory.interests.take(8).toList(),
+        'goals': memory.goals.take(5).toList(),
+        if (memory.summary.isNotEmpty) 'summary': memory.summary,
+        if (memory.focus.isNotEmpty) 'focus': memory.focus.take(4).toList(),
       };
 
-  /// Words from [text] that the learner already tracks (lemma match, case-insensitive).
+  /// Words in [text] that the learner tracks in [lang] (case-insensitive).
   Set<String> trackedWordIdsIn(String text) {
-    final tokens = RegExp(r'[A-Za-zÄÖÜäöüß]+').allMatches(text).map((m) => m.group(0)!.toLowerCase()).toSet();
-    return {
-      for (final c in cards.values)
-        if (words[c.wordId] != null && (tokens.contains(words[c.wordId]!.lemma) || tokens.contains(words[c.wordId]!.de.toLowerCase()))) c.wordId
-    };
+    final tokens = RegExp(r'[\p{L}]+', unicode: true).allMatches(text).map((m) => m.group(0)!.toLowerCase()).toSet();
+    final lower = text.toLowerCase();
+    final out = <String>{};
+    for (final c in cards.values) {
+      final w = words[c.wordId];
+      if (w == null) continue;
+      if (lang == 'de') {
+        if (tokens.contains(w.lemma) || tokens.contains(w.de.toLowerCase())) out.add(c.wordId);
+      } else {
+        for (final alt in w.inLang(lang).toLowerCase().split(RegExp(r'\s*/\s*'))) {
+          final a = alt.replaceAll(RegExp(r'\(.*?\)'), '').trim();
+          if (a.isEmpty) continue;
+          if (a.contains(' ') ? lower.contains(a) : tokens.contains(a)) {
+            out.add(c.wordId);
+            break;
+          }
+        }
+      }
+    }
+    return out;
   }
 }
 

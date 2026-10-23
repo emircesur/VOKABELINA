@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n.dart';
 import '../../data/content.dart';
+import '../../data/models.dart';
 import '../../services/api.dart';
 import '../../services/tts.dart';
 import '../../state/providers.dart';
@@ -51,7 +52,7 @@ class _TranslatorSheetState extends ConsumerState<TranslatorSheet> {
       result = null;
     });
     try {
-      final r = await ref.read(apiProvider).translate(text, from: toGerman ? profile.nativeLang : 'de', to: toGerman ? 'de' : profile.nativeLang, level: profile.level);
+      final r = await ref.read(apiProvider).translate(text, from: toGerman ? profile.nativeLang : profile.targetLang, to: toGerman ? profile.targetLang : profile.nativeLang, level: profile.level);
       if (mounted) setState(() => result = r);
     } on ApiException catch (e) {
       if (mounted) {
@@ -66,19 +67,20 @@ class _TranslatorSheetState extends ConsumerState<TranslatorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = ref.watch(profileProvider.select((p) => p.nativeLang));
-    final native = lang == 'tr' ? 'Türkçe' : 'English';
+    final p = ref.watch(profileProvider);
+    final native = langNames[p.nativeLang]![p.nativeLang]!;
+    final targetName = langNames[p.targetLang]![p.nativeLang]!;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Text(toGerman ? native : 'Deutsch', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            Text(toGerman ? native : targetName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             IconButton(tooltip: ref.t('Swap', 'Değiştir'), icon: const Icon(Icons.swap_horiz), onPressed: () => setState(() {
                   toGerman = !toGerman;
                   result = null;
                 })),
-            Text(toGerman ? 'Deutsch' : native, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            Text(toGerman ? targetName : native, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
           ]),
           TextField(controller: _c, minLines: 2, maxLines: 5, decoration: InputDecoration(hintText: ref.t('Type text…', 'Metin yaz…'))),
           const SizedBox(height: 12),
@@ -89,11 +91,11 @@ class _TranslatorSheetState extends ConsumerState<TranslatorSheet> {
             SpeechBubble(
               child: Row(children: [
                 Expanded(child: SelectableText(result!.translation, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
-                IconButton(icon: const Icon(Icons.volume_up), tooltip: ref.t('Listen', 'Dinle'), onPressed: () => speak(toGerman ? result!.translation : _c.text)),
+                IconButton(icon: const Icon(Icons.volume_up), tooltip: ref.t('Listen', 'Dinle'), onPressed: () => speak(toGerman ? result!.translation : _c.text, p.targetLang)),
               ]),
             ),
             if (result!.notes.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text('💡 ${result!.notes}')),
-            for (final w in result!.words) WordRow(word: w, onSpeak: () => speak(w.de)),
+            for (final w in result!.words) WordRow(word: w, onSpeak: () => speak(w.inLang(p.targetLang), p.targetLang)),
           ],
         ]),
       ),

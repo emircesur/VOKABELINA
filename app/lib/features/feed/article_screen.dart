@@ -26,7 +26,7 @@ class _ArticleScreenState extends ConsumerState<ArticleScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
-    final async = ref.watch(articleProvider((item: widget.item, level: profile.level, lang: profile.nativeLang)));
+    final async = ref.watch(articleProvider((item: widget.item, level: profile.level, lang: profile.nativeLang, target: profile.targetLang)));
     return Scaffold(
       appBar: AppBar(title: Text(widget.item.source)),
       body: SafeArea(
@@ -52,7 +52,7 @@ class _ArticleScreenState extends ConsumerState<ArticleScreen> {
                       Row(children: [
                         Text('Level ${profile.level}', style: const TextStyle(fontWeight: FontWeight.w900)),
                         const Spacer(),
-                        IconButton(tooltip: ref.t('Listen', 'Dinle'), icon: const Icon(Icons.volume_up), onPressed: () => speak(a.german)),
+                        IconButton(tooltip: ref.t('Listen', 'Dinle'), icon: const Icon(Icons.volume_up), onPressed: () => speak(a.german, profile.targetLang)),
                       ]),
                       SelectableText(a.german, style: const TextStyle(fontSize: 18, height: 1.4)),
                       if (showTranslation) ...[
@@ -74,7 +74,7 @@ class _ArticleScreenState extends ConsumerState<ArticleScreen> {
                   if (a.keywords.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(ref.t('Key words', 'Anahtar kelimeler'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                    for (final w in a.keywords) WordRow(word: w, onSpeak: () => speak(w.de)),
+                    for (final w in a.keywords) WordRow(word: w, onSpeak: () => speak(w.inLang(profile.targetLang), profile.targetLang)),
                   ],
                 ]),
               ),

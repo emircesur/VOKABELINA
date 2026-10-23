@@ -116,7 +116,7 @@ class _MemeCardState extends ConsumerState<_MemeCard> {
                 _memeText(m.bottom),
               ]),
               Positioned(right: 0, bottom: 56, child: Mascot(personaId: profile.persona, mood: 'happy', size: 56)),
-              Positioned(left: 0, bottom: 56, child: IconButton(tooltip: ref.t('Listen', 'Dinle'), color: Colors.white, icon: const Icon(Icons.volume_up), onPressed: () => speak('${m.top} ${m.bottom}'))),
+              Positioned(left: 0, bottom: 56, child: IconButton(tooltip: ref.t('Listen', 'Dinle'), color: Colors.white, icon: const Icon(Icons.volume_up), onPressed: () => speak('${m.top} ${m.bottom}', profile.targetLang))),
             ]),
           ),
         ),
@@ -125,7 +125,7 @@ class _MemeCardState extends ConsumerState<_MemeCard> {
           child: explained
               ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(m.explain(profile.nativeLang), style: const TextStyle(fontSize: 14.5)),
-                  for (final w in m.vocab) WordRow(word: w, onSpeak: () => speak(w.de)),
+                  for (final w in m.vocab) WordRow(word: w, onSpeak: () => speak(w.inLang(profile.targetLang), profile.targetLang)),
                 ])
               : FilledButton.tonalIcon(
                   onPressed: () => setState(() => explained = true),

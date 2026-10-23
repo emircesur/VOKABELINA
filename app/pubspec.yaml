@@ -41,6 +41,7 @@ dependencies:
   flutter_tts: ^4.2.5
   intl: ^0.20.3
   url_launcher: ^6.3.3
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:

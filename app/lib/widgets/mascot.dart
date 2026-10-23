@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/personas.dart';
 
-/// idle | happy | cheer | sad | thinking | talking
+/// idle | happy | cheer | sad | thinking | talking | wave | love
 typedef MascotMood = String;
 
 /// Animated mascot drawn procedurally (no image assets): breathing, blinking,
@@ -110,8 +110,13 @@ class _MascotPainter extends CustomPainter {
     final armPaint = _fill(_shade(p.body, -0.04));
     final raise = mood == 'cheer' ? 46.0 : 0.0;
     c.drawCircle(Offset(40, 128 - raise + (mood == 'cheer' ? wave * 4 : 0)), 13, armPaint);
-    final rightLift = mood == 'happy' ? 34.0 + wave * 6 : raise;
-    c.drawCircle(Offset(160, 128 - rightLift), 13, armPaint);
+    final rightLift = switch (mood) {
+      'happy' => 34.0 + wave * 6,
+      'wave' => 52.0,
+      _ => raise,
+    };
+    final waveX = mood == 'wave' ? math.sin(2 * math.pi * t * 4) * 9 : 0.0;
+    c.drawCircle(Offset(160 + waveX, 128 - rightLift), 13, armPaint);
   }
 
   void _tail(Canvas c, double t) {
@@ -220,7 +225,7 @@ class _MascotPainter extends CustomPainter {
 
     // blink: quick close around t≈0.9
     final blinkT = ((t - 0.9).abs() / 0.025).clamp(0.0, 1.0);
-    var open = mood == 'happy' || mood == 'cheer' ? 0.0 : blinkT; // happy = closed "^^" arcs
+    var open = mood == 'happy' || mood == 'cheer' || mood == 'love' ? 0.0 : blinkT; // happy = closed "^^" arcs
     if (mood == 'sad') open = math.min(open, 0.8);
 
     final gaze = switch (mood) {
@@ -230,7 +235,7 @@ class _MascotPainter extends CustomPainter {
 
     for (final sx in [-1.0, 1.0]) {
       final ex = 100 + sx * eyeDx;
-      if (mood == 'happy' || mood == 'cheer') {
+      if (mood == 'happy' || mood == 'cheer' || mood == 'love') {
         final arc = Paint()
           ..color = _dark
           ..style = PaintingStyle.stroke
@@ -263,7 +268,7 @@ class _MascotPainter extends CustomPainter {
     }
 
     // cheeks
-    if (mood == 'happy' || mood == 'cheer') {
+    if (mood == 'happy' || mood == 'cheer' || mood == 'love' || mood == 'wave') {
       final blush = _fill(const Color(0xFFFF7A7A).withValues(alpha: 0.35));
       c.drawOval(Rect.fromCenter(center: Offset(100 - eyeDx - 10, eyeY + 18), width: 16, height: 10), blush);
       c.drawOval(Rect.fromCenter(center: Offset(100 + eyeDx + 10, eyeY + 18), width: 16, height: 10), blush);
@@ -292,7 +297,7 @@ class _MascotPainter extends CustomPainter {
           ..close();
         c.drawPath(m, _fill(const Color(0xFF7A2E2E)));
         c.drawOval(Rect.fromCenter(center: Offset(100, mouthY + 11), width: 14, height: 8), _fill(const Color(0xFFFF8A8A)));
-      case 'happy':
+      case 'happy' || 'love' || 'wave':
         c.drawArc(Rect.fromCenter(center: Offset(100, mouthY), width: 30, height: 20), 0.15, math.pi - 0.3, false, line);
       case 'sad':
         c.drawArc(Rect.fromCenter(center: Offset(100, mouthY + 10), width: 24, height: 16), math.pi + 0.3, math.pi - 0.6, false, line);
@@ -319,10 +324,24 @@ class _MascotPainter extends CustomPainter {
           final o = Offset(30.0 + i * 46, 24 + 10 * math.sin(a * 2 * math.pi));
           _star(c, o, 7 + 3 * math.sin(a * math.pi), p.accent.withValues(alpha: 0.9));
         }
+      case 'love':
+        for (var i = 0; i < 3; i++) {
+          final a = (t * 1.2 + i / 3) % 1.0;
+          _heart(c, Offset(40.0 + i * 60, 60 - a * 50), 9 + 3 * math.sin(a * math.pi), const Color(0xFFE5485A).withValues(alpha: 1 - a));
+        }
       case 'sad':
         final drop = (t * 1.5) % 1.0;
         c.drawOval(Rect.fromCenter(center: Offset(124, 112 + drop * 22), width: 6, height: 9), _fill(const Color(0xFF6EC1F0).withValues(alpha: 1 - drop)));
     }
+  }
+
+  void _heart(Canvas c, Offset o, double r, Color color) {
+    final path = Path()
+      ..moveTo(o.dx, o.dy + r * 0.9)
+      ..cubicTo(o.dx - r * 1.4, o.dy - r * 0.2, o.dx - r * 0.6, o.dy - r * 1.2, o.dx, o.dy - r * 0.4)
+      ..cubicTo(o.dx + r * 0.6, o.dy - r * 1.2, o.dx + r * 1.4, o.dy - r * 0.2, o.dx, o.dy + r * 0.9)
+      ..close();
+    c.drawPath(path, _fill(color));
   }
 
   void _star(Canvas c, Offset o, double r, Color color) {

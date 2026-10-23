@@ -10,7 +10,7 @@ final newsProvider = FutureProvider.autoDispose<List<NewsItem>>((ref) => ref.wat
 final memesProvider = FutureProvider.autoDispose<({List<Meme> memes, bool offline})>((ref) async {
   final p = ref.watch(profileProvider);
   try {
-    final list = await ref.watch(apiProvider).memes(level: p.level, nativeLang: p.nativeLang);
+    final list = await ref.watch(apiProvider).memes(profile: p);
     if (list.isNotEmpty) return (memes: list, offline: false);
   } on Object {
     // fall through to the bundled memes
@@ -18,8 +18,8 @@ final memesProvider = FutureProvider.autoDispose<({List<Meme> memes, bool offlin
   return (memes: localMemes, offline: true);
 });
 
-typedef ArticleKey = ({NewsItem item, String level, String lang});
+typedef ArticleKey = ({NewsItem item, String level, String lang, String target});
 
 final articleProvider = FutureProvider.autoDispose.family<SimplifiedArticle, ArticleKey>(
-  (ref, k) => ref.watch(apiProvider).simplify(k.item, level: k.level, nativeLang: k.lang),
+  (ref, k) => ref.watch(apiProvider).simplify(k.item, profile: ref.read(profileProvider)),
 );

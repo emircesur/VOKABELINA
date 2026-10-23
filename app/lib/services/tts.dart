@@ -1,16 +1,19 @@
 import 'package:flutter_tts/flutter_tts.dart';
 
-final FlutterTts _tts = FlutterTts();
-bool _ready = false;
+import '../data/models.dart';
 
-/// Speaks German text. Never throws: TTS may be unavailable (web, emulator, tests).
-Future<void> speak(String text) async {
+final FlutterTts _tts = FlutterTts();
+String? _lang;
+
+/// Speaks [text] in [lang] ('de' | 'en' | 'tr'). Never throws: TTS may be
+/// unavailable (web without voices, emulator, tests).
+Future<void> speak(String text, [String lang = 'de', double rate = 0.45]) async {
   try {
-    if (!_ready) {
-      await _tts.setLanguage('de-DE');
-      await _tts.setSpeechRate(0.45);
-      _ready = true;
+    if (_lang != lang) {
+      await _tts.setLanguage(ttsLocales[lang] ?? 'de-DE');
+      _lang = lang;
     }
+    await _tts.setSpeechRate(rate);
     await _tts.stop();
     await _tts.speak(text);
   } catch (_) {}
