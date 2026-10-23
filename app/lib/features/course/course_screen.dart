@@ -12,8 +12,9 @@ import '../../services/streak.dart';
 import '../../state/providers.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/chunky_button.dart';
-import '../../widgets/common.dart';
+import '../../widgets/juice.dart';
 import '../../widgets/mascot.dart';
+import 'daily_cards.dart';
 
 String lessonTitle(WidgetRef ref, LessonSpec l) => switch (l.kind) {
   LessonKind.words => '${ref.t('Words', 'Kelimeler', 'Wörter')} ${l.part}',
@@ -55,8 +56,9 @@ Future<void> showTargetPicker(BuildContext context, WidgetRef ref) => showModalB
             ListTile(
               enabled: l != p.nativeLang,
               leading: Text(langFlags[l]!, style: const TextStyle(fontSize: 28)),
-              title: Text(langNames[l]![ref.uiLang] ?? langNames[l]!['en']!, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: l == p.nativeLang ? Text(ref.t('your language', 'ana dilin', 'deine Sprache')) : null,
+              // each language in its own words, with the name in the app language below
+              title: Text(langNames[l]![l]!, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text(l == p.nativeLang ? ref.t('your language', 'ana dilin', 'deine Sprache') : langNames[l]![ref.uiLang]!),
               trailing: l == p.targetLang ? const Icon(Icons.check_circle, color: Brand.green) : null,
               onTap: () {
                 ref.read(profileProvider.notifier).setTarget(l);
@@ -101,20 +103,36 @@ class CourseScreen extends ConsumerWidget {
                   onPressed: () => showTargetPicker(context, ref),
                 ),
                 const Spacer(),
-                StatChip(icon: '🔥', label: '${liveStreak(p, now)}', color: Brand.red),
+                Semantics(
+                  label: ref.t('${liveStreak(p, now)} day streak', '${liveStreak(p, now)} günlük seri', '${liveStreak(p, now)} Tage in Folge'),
+                  child: ExcludeSemantics(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: Brand.red.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        FlameIcon(size: 18, lit: liveStreak(p, now) > 0),
+                        const SizedBox(width: 4),
+                        Text('${liveStreak(p, now)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      ]),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 ProgressRing(
                   value: todayXp / p.dailyGoalXp,
                   size: 40,
                   stroke: 5,
                   color: todayXp >= p.dailyGoalXp ? Brand.green : Brand.gold,
-                  child: Text('$todayXp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                  child: todayXp >= p.dailyGoalXp
+                      ? const PopIn(child: Icon(Icons.check_rounded, color: Brand.green, size: 20))
+                      : Text('$todayXp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                 ),
               ],
             ),
           ),
         ),
         SliverToBoxAdapter(child: _ContinueCard(next: next)),
+        const SliverToBoxAdapter(child: DailyQuestsCard()),
         SliverToBoxAdapter(
           child: SizedBox(
             height: 132,
@@ -150,6 +168,7 @@ class CourseScreen extends ConsumerWidget {
             ),
           ),
         ),
+        const SliverToBoxAdapter(child: WordOfDayCard()),
         for (final entry in byLevel.entries) ...[
           SliverToBoxAdapter(
             child: _LevelHeader(level: entry.key, units: entry.value),

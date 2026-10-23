@@ -12,6 +12,7 @@ import '../services/api.dart';
 import '../services/learner.dart';
 import '../services/lessons.dart';
 import '../services/offline_tutor.dart';
+import '../services/quests.dart';
 import '../services/srs.dart';
 import '../services/streak.dart';
 
@@ -264,6 +265,8 @@ class MemoryNotifier extends Notifier<LearnerMemory> {
 
   void setInterests(List<String> interests) => _set(state.copyWith(interests: interests.take(12).toList()));
 
+  void setGoals(List<String> goals) => _set(state.copyWith(goals: goals.take(8).toList()));
+
   /// Merges the server's consolidated memory (summary, episodes, level estimate, tags …).
   void mergeServer(Map<String, dynamic> j) {
     final now = _now;
@@ -318,6 +321,47 @@ final learnerProvider = Provider<Learner>((ref) {
   final lang = ref.watch(profileProvider.select((p) => p.targetLang));
   return Learner(deck.words, deck.forLang(lang), ref.watch(memoryProvider), lang: lang, now: ref.watch(clockProvider)());
 });
+
+// -------------------------------------------------------------------- daily
+
+/// Today's counters for daily quests; starts fresh every day.
+final dailyProvider = NotifierProvider<DailyNotifier, DailyStats>(DailyNotifier.new);
+
+class DailyNotifier extends Notifier<DailyStats> {
+  String get _today => dayKey(ref.read(clockProvider)());
+
+  @override
+  DailyStats build() {
+    final j = _readJson(ref.read(sharedPrefsProvider), 'daily');
+    final s = j == null ? null : DailyStats.fromJson(j);
+    return s != null && s.day == _today ? s : DailyStats(day: _today);
+  }
+
+  DailyStats get _fresh => state.day == _today ? state : DailyStats(day: _today);
+
+  void _set(DailyStats s) {
+    state = s;
+    ref.read(sharedPrefsProvider).setString('daily', jsonEncode(s.toJson()));
+  }
+
+  void bump(String metric, [int n = 1]) => _set(_fresh.bump(metric, n));
+
+  /// Progress of [q] today (0 … target).
+  int progress(Quest q) {
+    final now = ref.read(clockProvider)();
+    final v = q.metric == Metric.xp ? liveTodayXp(ref.read(profileProvider), now) : _fresh[q.metric];
+    return v.clamp(0, q.target);
+  }
+
+  /// Marks a finished quest as claimed and pays its XP; false if not finished or already claimed.
+  bool claim(Quest q) {
+    final cur = _fresh;
+    if (cur.claimed.contains(q.id) || progress(q) < q.target) return false;
+    _set(cur.claim(q.id));
+    ref.read(profileProvider.notifier).addXp(q.reward);
+    return true;
+  }
+}
 
 // ----------------------------------------------------------------- progress
 
@@ -384,9 +428,12 @@ class CourseStatus {
     return ls.take(i).where((x) => x.required).every(done);
   }
 
-  /// The next lesson to do (first unlocked, not done, required).
+  /// The next lesson to do (first unlocked, not done, required). Units below
+  /// the placement level are only suggested once everything at it is done.
   (Unit, LessonSpec)? next() {
-    for (final u in units) {
+    final atLevel = units.where((u) => levels.indexOf(u.level) >= levels.indexOf(level));
+    final below = units.where((u) => levels.indexOf(u.level) < levels.indexOf(level));
+    for (final u in [...atLevel, ...below]) {
       if (!unitUnlocked(u)) continue;
       for (final l in lessonsFor(u)) {
         if (l.required && !done(l) && lessonUnlocked(u, l)) return (u, l);
@@ -475,6 +522,7 @@ class ChatNotifier extends Notifier<ChatState> {
     final learner = ref.read(learnerProvider);
     final now = ref.read(clockProvider)();
     final userMsg = ChatMessage(id: 'u${now.microsecondsSinceEpoch}', fromUser: true, text: text);
+    ref.read(dailyProvider.notifier).bump(Metric.chat);
     state = state.copyWith(messages: [...state.messages, userMsg], sending: true, mood: 'thinking', clearNotice: true);
     _save();
 

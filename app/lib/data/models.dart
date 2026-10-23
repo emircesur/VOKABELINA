@@ -187,7 +187,7 @@ class Profile {
   const Profile({
     this.onboarded = false,
     this.name = '',
-    this.nativeLang = 'tr',
+    this.nativeLang = 'en',
     this.targetLang = 'de',
     this.level = 'A1',
     this.persona = 'bruno',
@@ -279,7 +279,7 @@ class Profile {
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
         onboarded: (j['onboarded'] ?? false) as bool,
         name: (j['name'] ?? '') as String,
-        nativeLang: (j['nativeLang'] ?? 'tr') as String,
+        nativeLang: (j['nativeLang'] ?? 'en') as String,
         targetLang: (j['targetLang'] ?? 'de') as String,
         level: (j['level'] ?? 'A1') as String,
         persona: (j['persona'] ?? 'bruno') as String,

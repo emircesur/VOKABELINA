@@ -10,6 +10,8 @@ import '../../data/curriculum.dart';
 import '../../data/models.dart';
 import '../../services/api.dart';
 import '../../services/lessons.dart';
+import '../../services/quests.dart';
+import '../../services/streak.dart';
 import '../../state/providers.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/chunky_button.dart';
@@ -63,6 +65,10 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
   bool finished = false;
   int xpEarned = 0;
   int stars = 0;
+  bool goalReached = false;
+  int streak = 0;
+  Unit? unitCompleted;
+  int questsReady = 0;
   bool judging = false;
   String? judgeNote;
   final _rng = Random();
@@ -123,11 +129,26 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
   void _finish() {
     finished = true;
     final p = ref.read(profileProvider);
+    final now = ref.read(clockProvider)();
+    final xpBefore = liveTodayXp(p, now);
+    final unit = spec == null ? null : unitsById[spec!.unitId];
+    final unitWasDone = unit != null && ref.read(courseProvider).unitDone(unit);
     stars = starsFor(correct, graded);
     if (spec != null) ref.read(progressProvider.notifier).complete(spec!.id, correct: correct, total: graded, lang: p.targetLang);
     if (outcomes.isNotEmpty) ref.read(deckProvider.notifier).learnFromLesson(outcomes);
     xpEarned = 10 + correct + (stars == 3 ? 5 : 0) + (bestCombo >= 5 ? 3 : 0);
     ref.read(profileProvider.notifier).addXp(xpEarned);
+    final daily = ref.read(dailyProvider.notifier)
+      ..bump(Metric.lessons)
+      ..bump(Metric.words, outcomes.length);
+    if (stars == 3) daily.bump(Metric.perfect);
+
+    // celebrations for the summary screen
+    final after = ref.read(profileProvider);
+    goalReached = xpBefore < after.dailyGoalXp && liveTodayXp(after, now) >= after.dailyGoalXp;
+    streak = liveStreak(after, now);
+    if (unit != null && !unitWasDone && ref.read(courseProvider).unitDone(unit)) unitCompleted = unit;
+    questsReady = [for (final q in questsFor(dayKey(now), after.dailyGoalXp)) if (!ref.read(dailyProvider).claimed.contains(q.id) && daily.progress(q) >= q.target) q].length;
   }
 
   Future<void> _judge() async {
@@ -316,6 +337,29 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
     );
   }
 
+  Widget _banner(int i, String emoji, Color color, String title, String sub) => SlideFadeIn(
+        index: i + 4,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.08)]),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.6), width: 2),
+          ),
+          child: Row(children: [
+            PopIn(delay: Duration(milliseconds: 500 + i * 200), child: Text(emoji, style: const TextStyle(fontSize: 30))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                Text(sub, style: TextStyle(color: Theme.of(context).hintColor, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ]),
+        ),
+      );
+
   Widget _summary(Profile p) {
     final pct = graded == 0 ? 100 : (correct * 100 / graded).round();
     final words = [for (final id in outcomes.keys) ref.read(deckProvider).words[id]].whereType<Word>().toList();
@@ -338,7 +382,17 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
               child: Icon(Icons.star_rounded, size: 58, color: i < stars ? const Color(0xFFF2C14E) : Colors.grey.withValues(alpha: 0.3)),
             ),
         ]),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+        if (unitCompleted != null)
+          _banner(0, '🏆', Brand.teal, ref.t('Unit ${unitCompleted!.number} complete!', '${unitCompleted!.number}. ünite tamamlandı!', 'Einheit ${unitCompleted!.number} geschafft!'),
+              ref.t('The next unit is unlocked.', 'Sonraki ünite açıldı.', 'Die nächste Einheit ist freigeschaltet.')),
+        if (goalReached)
+          _banner(1, '🔥', Brand.red, ref.t('Daily goal reached!', 'Günlük hedefe ulaştın!', 'Tagesziel erreicht!'),
+              ref.t('$streak-day streak — keep it burning.', '$streak günlük seri — ateşi söndürme.', '$streak Tage in Folge – bleib dran.')),
+        if (questsReady > 0)
+          _banner(2, '🎁', Brand.gold, ref.t('Quest reward waiting', 'Görev ödülü seni bekliyor', 'Quest-Belohnung wartet'),
+              ref.t('Claim it on the Learn tab.', 'Öğren sekmesinden al.', 'Hol sie dir im Tab Lernen.')),
+        const SizedBox(height: 4),
         Row(children: [
           Expanded(child: _statCard('⭐', CountUp(value: xpEarned, prefix: '+', suffix: ' XP', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)), 'XP')),
           const SizedBox(width: 10),

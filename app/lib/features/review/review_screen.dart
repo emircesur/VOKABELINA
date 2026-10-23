@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../services/srs.dart';
 import '../../services/tts.dart';
+import '../../services/quests.dart';
 import '../../state/providers.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/chunky_button.dart';
@@ -46,6 +47,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 
   void _grade(Grade g) {
     ref.read(deckProvider.notifier).review(queue[index], g, lang: lang);
+    ref.read(dailyProvider.notifier).bump(Metric.reviews);
     xp += switch (g) { Grade.again => 1, Grade.hard => 2, Grade.good => 3, Grade.easy => 4 };
     if (g != Grade.again) correct++;
     setState(() {

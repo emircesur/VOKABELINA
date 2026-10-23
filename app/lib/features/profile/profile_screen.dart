@@ -297,7 +297,7 @@ class _Settings extends ConsumerWidget {
             ]),
             _label(ref.t('Daily goal', 'Günlük hedef', 'Tagesziel')),
             SegmentedButton<int>(
-              segments: const [ButtonSegment(value: 20, label: Text('20')), ButtonSegment(value: 50, label: Text('50')), ButtonSegment(value: 100, label: Text('100 XP'))],
+              segments: const [ButtonSegment(value: 20, label: Text('20')), ButtonSegment(value: 50, label: Text('50')), ButtonSegment(value: 100, label: Text('100')), ButtonSegment(value: 150, label: Text('150 XP'))],
               selected: {p.dailyGoalXp},
               onSelectionChanged: (s) => n.update((x) => x.copyWith(dailyGoalXp: s.first)),
             ),

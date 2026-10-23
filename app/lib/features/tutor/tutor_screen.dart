@@ -165,7 +165,7 @@ class _ChatViewState extends ConsumerState<ChatView> {
           PopIn(child: Mascot(personaId: persona.id, mood: 'wave', size: 150)),
           const SizedBox(height: 12),
           Text(
-            target == 'de' ? persona.hello : (target == 'en' ? "Hi! I'm ${persona.name}. Let's talk!" : 'Merhaba! Ben ${persona.name}. Hadi konuşalım!'),
+            persona.greeting(target),
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),

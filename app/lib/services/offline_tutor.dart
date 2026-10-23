@@ -19,11 +19,7 @@ class OfflineTutor {
     String n(String en, String tr, String de) => switch (native) { 'tr' => tr, 'de' => de, _ => en };
 
     if (firstTurn || word == null) {
-      final hello = switch (target) {
-        'en' => "Hi! I'm ${persona.name}. What's your name?",
-        'tr' => 'Merhaba! Ben ${persona.name}. Adın ne?',
-        _ => persona.hello,
-      };
+      final hello = persona.greeting(target);
       return ChatReply(
         id: 'off-${DateTime.now().microsecondsSinceEpoch}',
         reply: hello,

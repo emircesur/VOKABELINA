@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vokabelina/app.dart';
+import 'package:vokabelina/data/curriculum.dart';
 import 'package:vokabelina/data/vocab_bank.dart';
 import 'package:vokabelina/features/lesson/lesson_screen.dart';
 import 'package:vokabelina/state/providers.dart';
@@ -30,14 +31,30 @@ Future<void> _tap(WidgetTester tester, Finder f, {int ms = 500}) async {
 void main() {
   testWidgets('Turkish learner: onboarding → course map → first lesson runs end to end', (tester) async {
     final c = await _pump(tester);
-    expect(find.text('Vokabelina'), findsOneWidget);
+    // nothing is preselected and every language is offered in its own words
+    expect(find.text('Türkçe'), findsOneWidget);
+    expect(find.text('Use the app in English'), findsOneWidget);
+    expect(find.text('Die App auf Deutsch nutzen'), findsOneWidget);
+    expect(find.text('Uygulamayı Türkçe kullan'), findsOneWidget);
 
-    // welcome → native (tr) → target (de) → level → persona → goal
-    for (var i = 0; i < 5; i++) {
-      await _tap(tester, find.text('DEVAM'), ms: 400);
-    }
-    await _tap(tester, find.text('BAŞLAYALIM!'), ms: 800);
+    // language choices advance by themselves
+    await _tap(tester, find.text('Türkçe'), ms: 900);
+    await _tap(tester, find.text('Deutsch'), ms: 900);
+    await _tap(tester, find.text('Seyahat'), ms: 200);
+    await _tap(tester, find.text('DEVAM'), ms: 600); // why
+    await _tap(tester, find.text('Yeni başlıyorum'), ms: 200);
+    await _tap(tester, find.text('DEVAM'), ms: 600); // level
+    await _tap(tester, find.text('Futbol'), ms: 200);
+    await _tap(tester, find.text('DEVAM'), ms: 600); // interests
+    await _tap(tester, find.text('DEVAM'), ms: 600); // tutor
+    await _tap(tester, find.text('DEVAM'), ms: 600); // goal
+    await _tap(tester, find.text('GEÇ'), ms: 600); // name
+    expect(find.text('Her şey hazır!'), findsOneWidget);
+    await _tap(tester, find.text('Önce etrafa bakayım'), ms: 900);
     expect(c.read(profileProvider).targetLang, 'de');
+    expect(c.read(profileProvider).nativeLang, 'tr');
+    expect(c.read(memoryProvider).interests, ['Futbol']);
+    expect(c.read(memoryProvider).goals, ['Seyahat']);
 
     // course map with the continue card
     expect(find.text('Öğren'), findsOneWidget);
@@ -97,14 +114,17 @@ void main() {
 
   testWidgets('German speaker learning Turkish gets German UI; every tab opens', (tester) async {
     await _pump(tester);
-    await _tap(tester, find.text('DEVAM'), ms: 400);
-    await _tap(tester, find.text('🇩🇪  Deutsch'), ms: 300);
-    await _tap(tester, find.text('WEITER'), ms: 400);
-    await _tap(tester, find.textContaining('Türkisch'), ms: 300);
-    for (var i = 0; i < 3; i++) {
-      await _tap(tester, find.text('WEITER'), ms: 400);
-    }
-    await _tap(tester, find.text("LOS GEHT'S!"), ms: 800);
+    await _tap(tester, find.text('Deutsch'), ms: 900);
+    await _tap(tester, find.text('Türkçe'), ms: 900);
+    expect(find.text('Warum lernst du Türkisch?'), findsOneWidget);
+    await _tap(tester, find.text('ÜBERSPRINGEN'), ms: 600);
+    await _tap(tester, find.text('Ich fange neu an'), ms: 200);
+    await _tap(tester, find.text('WEITER'), ms: 600);
+    await _tap(tester, find.text('ÜBERSPRINGEN'), ms: 600);
+    await _tap(tester, find.text('WEITER'), ms: 600);
+    await _tap(tester, find.text('WEITER'), ms: 600);
+    await _tap(tester, find.text('ÜBERSPRINGEN'), ms: 600);
+    await _tap(tester, find.text('Erst mal umschauen'), ms: 900);
     expect(find.text('Lernen'), findsOneWidget);
     expect(find.textContaining('Türkisch'), findsWidgets);
 
@@ -112,5 +132,37 @@ void main() {
       await _tap(tester, find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)), ms: 600);
     }
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('placement test puts a strong learner at B1 and starts the first B1 lesson', (tester) async {
+    final c = await _pump(tester);
+    await _tap(tester, find.text('English'), ms: 900);
+    await _tap(tester, find.text('Deutsch'), ms: 900);
+    await _tap(tester, find.text('SKIP'), ms: 600);
+    await _tap(tester, find.text('Not sure? Take the 1-minute test'), ms: 600);
+    for (var q = 0; q < 9; q++) {
+      final prompt = tester.widget<Text>(find.byWidgetPredicate((w) => w is Text && w.style?.fontSize == 32)).data!;
+      final answer = bankWords.values.firstWhere((w) => w.de == prompt).en;
+      await _tap(tester, find.text(answer), ms: 800);
+    }
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('B1'), findsWidgets);
+    expect(find.textContaining('9 / 9'), findsOneWidget);
+    await _tap(tester, find.text('CONTINUE'), ms: 600); // level
+    await _tap(tester, find.text('SKIP'), ms: 600); // interests
+    await _tap(tester, find.text('CONTINUE'), ms: 600); // tutor
+    await _tap(tester, find.text('CONTINUE'), ms: 600); // goal
+    await tester.enterText(find.byType(TextField), 'Alex');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('Freut mich, Alex!'), findsOneWidget);
+    await _tap(tester, find.text('CONTINUE'), ms: 600); // name
+    await _tap(tester, find.text('START MY FIRST LESSON'), ms: 300);
+    // the course map shows for a beat, then the first lesson slides in
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 600));
+    final p = c.read(profileProvider);
+    expect((p.level, p.nativeLang, p.name), ('B1', 'en', 'Alex'));
+    final lesson = tester.widget<LessonScreen>(find.byType(LessonScreen));
+    expect(unitsById[lesson.lessonId!.split('_').first]!.level, 'B1');
   });
 }

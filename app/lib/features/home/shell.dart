@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/i18n.dart';
 import '../../state/providers.dart';
@@ -17,6 +18,15 @@ class TabNotifier extends Notifier<int> {
   void go(int i) => state = i;
 }
 
+/// A route to open once the shell is on screen (e.g. the first lesson right after onboarding).
+final launchProvider = NotifierProvider<LaunchNotifier, String?>(LaunchNotifier.new);
+
+class LaunchNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? path) => state = path;
+}
+
 class Shell extends ConsumerStatefulWidget {
   const Shell({super.key});
   @override
@@ -29,6 +39,15 @@ class _ShellState extends ConsumerState<Shell> {
     super.initState();
     // refresh the server-side memory once per app start (no-op when offline/disabled)
     Future.microtask(() => ref.read(memoryProvider.notifier).sync());
+    final launch = ref.read(launchProvider);
+    if (launch != null) {
+      // a beat on the course map first; also lets the router finish leaving onboarding
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (!mounted) return;
+        ref.read(launchProvider.notifier).set(null);
+        context.push(launch);
+      });
+    }
   }
 
   @override
