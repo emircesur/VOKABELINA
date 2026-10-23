@@ -17,6 +17,7 @@
   label { display:block; font-size:12px; color:var(--mute); margin:8px 0 3px; }
   input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); font:inherit; }
   textarea { min-height:80px; }
+  .row > div { overflow-x:auto; }
   .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; }
   button { padding:8px 14px; border:0; border-radius:9px; background:var(--brand); color:#fff; font-weight:600; cursor:pointer; }
   button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
@@ -25,6 +26,7 @@
   .ok { color:var(--ok); } .bad { color:var(--bad); }
   .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
   .stat b { display:block; font-size:22px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; } td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
   #login { max-width:380px; margin:12vh auto; }
 </style>
 </head>
@@ -37,11 +39,20 @@
 </section></main>
 <main id="app" hidden>
   <section><h2>Overview</h2><div class="stats" id="stats"></div>
-    <p><button class="ghost" id="export">Download fine-tune dataset (👍 chats, JSONL)</button></p></section>
+    <p><button class="ghost" id="export">Fine-tune dataset (👍 chats, JSONL)</button> <button class="ghost" id="exportKto">Preference dataset (👍/👎, KTO JSONL)</button></p></section>
+  <section><h2>Learning insights</h2>
+    <p style="color:var(--mute)">Aggregated across learners — no personal content. Use it to see which grammar trips people up and which teaching style learners prefer.</p>
+    <div id="insights">Loading…</div></section>
   <section><h2>AI providers</h2>
     <p style="color:var(--mute)">Keys are stored on the server only and never sent to the app. Leave a masked key untouched to keep it. “OpenAI-compatible” also covers OpenRouter, Groq, DeepSeek, Together, Ollama, vLLM… (set a base URL).</p>
     <div id="providers"></div><button class="ghost" id="addProvider">+ Add provider</button></section>
-  <section><h2>Routing per task</h2><div id="routes"></div></section>
+  <section><h2>Routing per task</h2>
+    <p style="color:var(--mute)">Pick a provider and model for each AI feature, with an optional fallback. Cheap, fast models work well for translate / word / judge / practice / grammar.</p>
+    <div id="routes"></div>
+    <label><input type="checkbox" id="images" style="width:auto"> Generate AI pictures for word cards (task “image”, OpenAI-compatible images API; each picture is generated once and shared)</label></section>
+  <section><h2>Teaching styles (prompt variants)</h2>
+    <p style="color:var(--mute)">For every tutor reply the server picks one style with Thompson sampling over learners’ 👍/👎 — a small online reinforcement-learning loop. Add, edit or disable styles here.</p>
+    <div id="variants"></div><button class="ghost" id="addVariant">+ Add style</button></section>
   <section><h2>News sources (RSS)</h2><div id="feeds"></div><button class="ghost" id="addFeed">+ Add source</button></section>
   <section><h2>Limits &amp; prompt</h2>
     <div class="row"><div><label>Max tokens per reply</label><input id="maxTokens" type="number"></div>
@@ -71,7 +82,7 @@ $('#logout').onclick = () => { sessionStorage.removeItem('adm'); location.reload
 
 async function start(c) {
   cfg = c; $('#login').hidden = true; $('#app').hidden = false; $('#logout').hidden = false;
-  render(); loadStats();
+  render(); loadStats(); loadInsights();
 }
 async function loadStats() {
   const s = await (await api('/admin/api/stats')).json();
@@ -92,7 +103,7 @@ function render() {
     </div><p><button class="ghost" onclick="testP(${i})">Test connection</button> <button class="ghost" onclick="delP(${i})">Remove</button> <span id="t${i}"></span></p></div>`).join('');
   const opts = (sel) => `<option value="">— none —</option>` + cfg.providers.map(p => `<option value="${esc(p.id)}" ${p.id===sel?'selected':''}>${esc(p.name)}</option>`).join('');
   $('#routes').innerHTML = cfg.routes.map((r, i) => `
-    <div class="card"><b>${esc(r.task)}</b><div class="row">
+    <div class="card"><b>${esc(r.task)}</b> <span style="color:var(--mute)">— ${esc((cfg.taskDescriptions||{})[r.task]||'')}</span><div class="row">
       <div><label>Provider</label><select data-r="${i}" data-k="providerId">${opts(r.providerId)}</select></div>
       <div><label>Model</label><input data-r="${i}" data-k="model" value="${esc(r.model)}"></div>
       <div><label>Fallback provider</label><select data-r="${i}" data-k="fallbackProviderId">${opts(r.fallbackProviderId)}</select></div>
@@ -104,6 +115,13 @@ function render() {
       <div style="grid-column:span 2"><label>RSS URL</label><input data-f="${i}" data-k="url" value="${esc(f.url)}"></div>
       <div><label>Enabled</label><select data-f="${i}" data-k="enabled"><option value="true" ${f.enabled?'selected':''}>yes</option><option value="false" ${!f.enabled?'selected':''}>no</option></select></div>
     </div><p><button class="ghost" onclick="delF(${i})">Remove</button></p></div>`).join('');
+  $('#variants').innerHTML = (cfg.variants||[]).map((v, i) => `
+    <div class="card"><div class="row">
+      <div><label>ID</label><input data-v="${i}" data-k="id" value="${esc(v.id)}"></div>
+      <div><label>Enabled</label><select data-v="${i}" data-k="enabled"><option value="true" ${v.enabled?'selected':''}>yes</option><option value="false" ${!v.enabled?'selected':''}>no</option></select></div>
+    </div><label>Instruction</label><textarea data-v="${i}" data-k="text">${esc(v.text)}</textarea>
+    <p><button class="ghost" onclick="delV(${i})">Remove</button></p></div>`).join('');
+  $('#images').checked = !!cfg.imagesEnabled;
   $('#maxTokens').value = cfg.maxTokens; $('#rate').value = cfg.rateLimitPerMinute; $('#grate').value = cfg.globalAiPerMinute; $('#daily').value = cfg.dailyAiLimit; $('#extra').value = cfg.extraSystemPrompt;
 }
 document.addEventListener('input', e => {
@@ -112,11 +130,31 @@ document.addEventListener('input', e => {
   if (t.dataset.p !== undefined) cfg.providers[+t.dataset.p][k] = v;
   if (t.dataset.r !== undefined) cfg.routes[+t.dataset.r][k] = v;
   if (t.dataset.f !== undefined) cfg.feeds[+t.dataset.f][k] = v;
+  if (t.dataset.v !== undefined) cfg.variants[+t.dataset.v][k] = v;
 });
 $('#addProvider').onclick = () => { cfg.providers.push({ id: 'custom' + (cfg.providers.length + 1), name: 'Custom', kind: 'openai', baseUrl: '', apiKey: '', enabled: true }); render(); };
 $('#addFeed').onclick = () => { cfg.feeds.push({ name: '', url: '', enabled: true }); render(); };
 window.delP = i => { cfg.providers.splice(i, 1); render(); };
 window.delF = i => { cfg.feeds.splice(i, 1); render(); };
+window.delV = i => { cfg.variants.splice(i, 1); render(); };
+$('#addVariant').onclick = () => { cfg.variants = cfg.variants || []; cfg.variants.push({ id: 'style' + (cfg.variants.length + 1), task: 'chat', text: '', enabled: true }); render(); };
+$('#images').onchange = e => { cfg.imagesEnabled = e.target.checked; };
+async function loadInsights() {
+  const r = await api('/admin/api/insights'); if (!r.ok) return;
+  const d = await r.json();
+  const tags = (d.topMistakeTags || []).map(t => `<tr><td>${esc(t.tag)}</td><td>${t.count}</td></tr>`).join('') || '<tr><td colspan=2>—</td></tr>';
+  const vars = (d.promptVariants || []).map(v => `<tr><td>${esc(v.id)}${v.enabled ? '' : ' (off)'}</td><td>${v.shown}</td><td>${v.up}/${v.down}</td><td>${Math.round(v.winRate * 100)}%</td></tr>`).join('');
+  const use = (d.usage || []).map(u => `<tr><td>${u.day}</td><td>${esc(u.key)}</td><td>${u.calls}</td><td>${u.in}</td><td>${u.out}</td></tr>`).join('') || '<tr><td colspan=5>—</td></tr>';
+  const kv = o => Object.entries(o || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ') || '—';
+  $('#insights').innerHTML = `
+    <div class="stats"><div class="stat"><b>${d.learners}</b>learners</div><div class="stat"><b>${d.averageWritingScore ?? '—'}</b>avg writing score</div></div>
+    <p><b>Chat turns by level:</b> ${kv(d.chatTurnsByLevel)}<br><b>By target language:</b> ${kv(d.chatTurnsByTarget)}</p>
+    <div class="row">
+      <div><b>Most common mistakes</b><table>${tags}</table></div>
+      <div><b>Teaching styles</b><table><tr><th>style</th><th>shown</th><th>👍/👎</th><th>win</th></tr>${vars}</table></div>
+    </div>
+    <p><b>Token usage (last 14 days)</b></p><table><tr><th>day</th><th>provider/model/task</th><th>calls</th><th>in</th><th>out</th></tr>${use}</table>`;
+}
 window.testP = async i => {
   const el = $('#t' + i); el.textContent = 'testing… (save first if you changed the key)';
   const p = cfg.providers[i];
@@ -130,10 +168,12 @@ $('#save').onclick = async () => {
   if (r.ok) { cfg = await r.json(); render(); loadStats(); $('#saveMsg').innerHTML = '<span class="ok">Saved ✓</span>'; } else $('#saveMsg').innerHTML = '<span class="bad">Save failed</span>';
   setTimeout(() => $('#saveMsg').textContent = '', 3000);
 };
-$('#export').onclick = async () => {
-  const b = await (await api('/admin/api/export.jsonl')).blob();
-  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'vokabelina-finetune.jsonl'; a.click();
-};
+async function download(path, name) {
+  const b = await (await api(path)).blob();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click();
+}
+$('#export').onclick = () => download('/admin/api/export.jsonl', 'vokabelina-finetune.jsonl');
+$('#exportKto').onclick = () => download('/admin/api/export-kto.jsonl', 'vokabelina-kto.jsonl');
 if (tok()) fetch('/admin/api/config', { headers: { authorization: 'Bearer ' + tok() } }).then(async r => { if (r.ok) start(await r.json()); });
 </script>
 </body>

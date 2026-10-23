@@ -285,7 +285,12 @@ class MemoryNotifier extends Notifier<LearnerMemory> {
         final cat = f is Map ? '${f['category'] ?? 'other'}' : 'other';
         if (text.trim().isEmpty) continue;
         final i = cur.indexWhere((x) => x.text.toLowerCase() == text.toLowerCase());
-        if (i < 0) cur.add(MemoryFact(text: text, category: cat, firstSeen: now, lastSeen: now));
+        if (i < 0) {
+          cur.add(MemoryFact(text: text, category: cat, firstSeen: now, lastSeen: now));
+        } else if (cur[i].category == 'other' && cat != 'other') {
+          final f = cur[i];
+          cur[i] = MemoryFact(text: f.text, category: cat, firstSeen: f.firstSeen, lastSeen: f.lastSeen, mentions: f.mentions);
+        }
       }
       m = m.copyWith(facts: cur);
     }

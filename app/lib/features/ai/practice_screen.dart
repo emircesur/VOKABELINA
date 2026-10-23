@@ -104,11 +104,16 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     return Column(children: [
       if (note != null || aiUsed)
         Material(
+          color: (aiUsed ? const Color(0xFF7B4FB8) : Colors.grey).withValues(alpha: 0.14),
           child: SafeArea(
             bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(aiUsed ? '✨ ${ref.t('Includes AI sentences made for you', 'Sana özel AI cümleleri içerir', 'Enthält KI-Sätze nur für dich')}' : note!, style: const TextStyle(fontSize: 12.5)),
+            child: SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Text(aiUsed ? '✨ ${ref.t('Includes AI sentences made for you', 'Sana özel AI cümleleri içerir', 'Enthält KI-Sätze nur für dich')}' : note!,
+                    textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              ),
             ),
           ),
         ),

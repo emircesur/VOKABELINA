@@ -41,6 +41,7 @@ class _ChunkyButtonState extends ConsumerState<ChunkyButton> {
       button: true,
       enabled: enabled,
       label: widget.label,
+      excludeSemantics: true, // the upper-cased text would be read a second time
       child: GestureDetector(
         onTapDown: enabled ? (_) => setState(() => _down = true) : null,
         onTapCancel: () => setState(() => _down = false),

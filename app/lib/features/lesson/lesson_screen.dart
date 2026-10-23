@@ -240,6 +240,7 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
           trigger: shake,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 280),
+            layoutBuilder: (current, previous) => Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
             transitionBuilder: (c, a) => FadeTransition(opacity: a, child: SlideTransition(position: Tween(begin: const Offset(0.08, 0), end: Offset.zero).animate(a), child: c)),
             child: SingleChildScrollView(
               key: ValueKey('ex$index'),
@@ -391,7 +392,7 @@ class UnitWordGrid extends ConsumerWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: 0.82,
+      childAspectRatio: 1.0,
       children: [
         for (final (i, w) in unit.words.indexed)
           SlideFadeIn(

@@ -125,8 +125,8 @@ class ApiClient {
     return ChatReply.fromJson(j, level: profile.level);
   }
 
-  Future<Translation> translate(String text, {required String from, required String to, required String level}) async =>
-      Translation.fromJson(await _call('POST', '/v1/ai/translate', body: {'text': text, 'from': from, 'to': to, 'level': level}));
+  Future<Translation> translate(String text, {required String from, required String to, required String level, String? nativeLang}) async => Translation.fromJson(
+      await _call('POST', '/v1/ai/translate', body: {'text': text, 'from': from, 'to': to, 'level': level, 'nativeLang': ?nativeLang}));
 
   Future<List<NewsItem>> news() async {
     final j = await _call('GET', '/v1/feed/news');

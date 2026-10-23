@@ -52,7 +52,7 @@ class _TranslatorSheetState extends ConsumerState<TranslatorSheet> {
       result = null;
     });
     try {
-      final r = await ref.read(apiProvider).translate(text, from: toGerman ? profile.nativeLang : profile.targetLang, to: toGerman ? profile.targetLang : profile.nativeLang, level: profile.level);
+      final r = await ref.read(apiProvider).translate(text, from: toGerman ? profile.nativeLang : profile.targetLang, to: toGerman ? profile.targetLang : profile.nativeLang, level: profile.level, nativeLang: profile.nativeLang);
       if (mounted) setState(() => result = r);
     } on ApiException catch (e) {
       if (mounted) {

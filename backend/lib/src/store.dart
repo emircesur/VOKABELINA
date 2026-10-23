@@ -9,6 +9,12 @@ import 'config.dart';
 /// Pass a null [dir] for a purely in-memory store (tests).
 class Store {
   Store(this.dir) {
+    final d = dir;
+    if (d != null) {
+      d.createSync(recursive: true);
+      // keys, memories and chat logs live here: owner-only access
+      if (!Platform.isWindows) Process.runSync('chmod', ['700', d.path]);
+    }
     config = _loadConfig();
     tokenSecret = _loadSecret();
   }
@@ -81,6 +87,62 @@ class Store {
       for (final line in f.readAsLinesSync())
         if (line.trim().isNotEmpty) jsonDecode(line) as Map<String, dynamic>
     ];
+  }
+
+  /// Reads a JSON document under the data dir (`name` may contain one sub-folder).
+  Map<String, dynamic>? readDoc(String name) {
+    final d = dir;
+    if (d == null) return _memDocs[name];
+    final f = File('${d.path}/$name');
+    if (!f.existsSync()) return null;
+    try {
+      return jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void writeDoc(String name, Map<String, dynamic> doc) {
+    final d = dir;
+    if (d == null) {
+      _memDocs[name] = doc;
+      return;
+    }
+    final f = File('${d.path}/$name');
+    f.parent.createSync(recursive: true);
+    final tmp = File('${f.path}.tmp')..writeAsStringSync(jsonEncode(doc));
+    tmp.renameSync(f.path);
+  }
+
+  void deleteDoc(String name) {
+    final d = dir;
+    if (d == null) {
+      _memDocs.remove(name);
+      return;
+    }
+    final f = File('${d.path}/$name');
+    if (f.existsSync()) f.deleteSync();
+  }
+
+  /// Binary blobs (generated images). Returns null in memory-only mode.
+  File? blobFile(String name) => dir == null ? null : File('${dir!.path}/$name');
+
+  final Map<String, Map<String, dynamic>> _memDocs = {};
+
+  /// Removes every log entry of one (hashed) device — "delete my data".
+  int forgetDevice(String deviceHash) {
+    final kept = readLog().where((e) => e['device'] != deviceHash).toList();
+    final removed = readLog().length - kept.length;
+    final f = _logFile;
+    if (f == null) {
+      _memoryLog
+        ..clear()
+        ..addAll(kept);
+    } else if (f.existsSync()) {
+      final tmp = File('${f.path}.tmp')..writeAsStringSync(kept.map((e) => '${jsonEncode(e)}\n').join());
+      tmp.renameSync(f.path);
+    }
+    return removed;
   }
 
   static String _randomHex(int bytes) {

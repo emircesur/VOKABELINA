@@ -100,8 +100,11 @@ mixin _AutoSpeak<T extends StatefulWidget> on State<T> {
 
 /// A tappable answer option that colours itself after the answer.
 class _Option extends StatelessWidget {
-  const _Option({required this.child, required this.onTap, this.state = 0, this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14)});
+  const _Option({required this.child, required this.onTap, this.state = 0, this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14), this.expand = false});
   final Widget child;
+
+  /// Full-width row option (meaning / sentence choices).
+  final bool expand;
   final VoidCallback? onTap;
 
   /// 0 neutral, 1 correct, 2 wrong (chosen), 3 dimmed
@@ -113,7 +116,7 @@ class _Option extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final border = switch (state) { 1 => Brand.green, 2 => Brand.red, _ => cs.outlineVariant };
     final bg = switch (state) { 1 => Brand.green.withValues(alpha: 0.14), 2 => Brand.red.withValues(alpha: 0.12), _ => Colors.transparent };
-    return AnimatedOpacity(
+    final option = AnimatedOpacity(
       duration: const Duration(milliseconds: 200),
       opacity: state == 3 ? 0.45 : 1,
       child: Material(
@@ -122,6 +125,7 @@ class _Option extends StatelessWidget {
         child: InkWell(borderRadius: BorderRadius.circular(16), onTap: onTap, child: Padding(padding: padding, child: child)),
       ),
     );
+    return expand ? SizedBox(width: double.infinity, child: option) : option;
   }
 }
 
@@ -291,6 +295,7 @@ class _MeaningChoiceViewState extends ConsumerState<MeaningChoiceView> with _Aut
           child: SlideFadeIn(
             index: i,
             child: _Option(
+              expand: true,
               state: _optState(widget.c.answered, o.id == e.word.id, o.id == chosen),
               onTap: widget.c.answered
                   ? null
@@ -789,6 +794,7 @@ class _PhraseChoiceViewState extends ConsumerState<PhraseChoiceView> with _AutoS
           child: SlideFadeIn(
             index: i,
             child: _Option(
+              expand: true,
               state: _optState(widget.c.answered, o.id == e.phrase.id, o.id == chosen),
               onTap: widget.c.answered
                   ? null

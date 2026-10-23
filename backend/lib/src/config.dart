@@ -71,14 +71,30 @@ class AiRoute {
     this.fallbackModel = '',
   });
 
-  /// 'chat' | 'translate' | 'simplify' | 'memes'
+  /// One of [tasks].
   final String task;
   String providerId;
   String model;
   String fallbackProviderId;
   String fallbackModel;
 
-  static const tasks = ['chat', 'translate', 'simplify', 'memes'];
+  static const tasks = ['chat', 'translate', 'simplify', 'memes', 'word', 'check', 'judge', 'practice', 'story', 'grammar', 'memory', 'image'];
+
+  /// What each task does (shown in the admin panel).
+  static const descriptions = {
+    'chat': 'Tutor conversation & role-plays',
+    'translate': 'Translator',
+    'simplify': 'News at the learner level',
+    'memes': 'Daily culture memes',
+    'word': 'Word coach: mnemonics, examples',
+    'check': 'Writing correction',
+    'judge': 'Second opinion on typed answers',
+    'practice': 'Personalised gap-fills',
+    'story': 'Graded reader stories',
+    'grammar': 'Grammar explanations',
+    'memory': 'Memory consolidation (backend only)',
+    'image': 'Picture-card images (OpenAI-compatible images API)',
+  };
 
   Map<String, dynamic> toJson() => {
         'task': task,
@@ -111,19 +127,36 @@ class FeedSource {
       );
 }
 
+/// An alternative teaching-style instruction. The server picks one per chat
+/// reply with Thompson sampling over 👍/👎 feedback (see PromptBandit).
+class PromptVariant {
+  PromptVariant({required this.id, required this.text, this.task = 'chat', this.enabled = true});
+  final String id;
+  String task;
+  String text;
+  bool enabled;
+
+  Map<String, dynamic> toJson() => {'id': id, 'task': task, 'text': text, 'enabled': enabled};
+  static PromptVariant fromJson(Map<String, dynamic> j) =>
+      PromptVariant(id: j['id'] as String, task: (j['task'] ?? 'chat') as String, text: (j['text'] ?? '') as String, enabled: (j['enabled'] ?? true) as bool);
+}
+
 class ServerConfig {
   ServerConfig({
     List<AiProvider>? providers,
     List<AiRoute>? routes,
     List<FeedSource>? feeds,
+    List<PromptVariant>? variants,
     this.maxTokens = 900,
+    this.imagesEnabled = false,
     this.rateLimitPerMinute = 20,
     this.globalAiPerMinute = 120,
     this.dailyAiLimit = 5000,
     this.extraSystemPrompt = '',
   })  : providers = providers ?? [],
         routes = routes ?? [],
-        feeds = feeds ?? [] {
+        feeds = feeds ?? [],
+        variants = variants ?? [] {
     for (final t in AiRoute.tasks) {
       if (!this.routes.any((r) => r.task == t)) this.routes.add(AiRoute(task: t));
     }
@@ -132,7 +165,11 @@ class ServerConfig {
   final List<AiProvider> providers;
   final List<AiRoute> routes;
   final List<FeedSource> feeds;
+  final List<PromptVariant> variants;
   int maxTokens;
+
+  /// Generate AI pictures for word cards (costly; results are cached and shared).
+  bool imagesEnabled;
   int rateLimitPerMinute;
 
   /// Cost guards across all devices, so minting device ids cannot drain the API keys.
@@ -164,10 +201,14 @@ class ServerConfig {
               enabled: false),
         ],
         routes: [
-          AiRoute(task: 'chat', providerId: 'anthropic', model: 'claude-sonnet-5-5'),
-          AiRoute(task: 'translate', providerId: 'anthropic', model: 'claude-haiku-5-5'),
-          AiRoute(task: 'simplify', providerId: 'anthropic', model: 'claude-haiku-5-5'),
-          AiRoute(task: 'memes', providerId: 'anthropic', model: 'claude-sonnet-5-5'),
+          for (final t in ['chat', 'memes', 'check', 'story', 'memory']) AiRoute(task: t, providerId: 'anthropic', model: 'claude-sonnet-5-5'),
+          for (final t in ['translate', 'simplify', 'word', 'judge', 'practice', 'grammar']) AiRoute(task: t, providerId: 'anthropic', model: 'claude-haiku-5-5'),
+          AiRoute(task: 'image', providerId: 'openai', model: 'gpt-image-1'),
+        ],
+        variants: [
+          PromptVariant(id: 'balanced', text: 'Balance correction and conversation; keep it light and encouraging.'),
+          PromptVariant(id: 'curious', text: 'Ask one genuinely curious follow-up question about the learner\'s life each time; correct only the most important mistake.'),
+          PromptVariant(id: 'storyteller', text: 'Use tiny anecdotes from your own (mascot) life in Germany to model the language, then invite the learner to share theirs.'),
         ],
         feeds: [
           FeedSource(name: 'Tagesschau', url: 'https://www.tagesschau.de/index~rss2.xml'),
@@ -179,23 +220,43 @@ class ServerConfig {
         'providers': providers.map((p) => p.toJson(maskKey: maskKeys)).toList(),
         'routes': routes.map((r) => r.toJson()).toList(),
         'feeds': feeds.map((f) => f.toJson()).toList(),
+        'variants': variants.map((v) => v.toJson()).toList(),
         'maxTokens': maxTokens,
+        'imagesEnabled': imagesEnabled,
         'rateLimitPerMinute': rateLimitPerMinute,
         'globalAiPerMinute': globalAiPerMinute,
         'dailyAiLimit': dailyAiLimit,
         'extraSystemPrompt': extraSystemPrompt,
       };
 
-  static ServerConfig fromJson(Map<String, dynamic> j) => ServerConfig(
+  static ServerConfig fromJson(Map<String, dynamic> j) {
+    final c = ServerConfig(
         providers: [for (final p in (j['providers'] as List? ?? [])) AiProvider.fromJson(Map<String, dynamic>.from(p as Map))],
         routes: [for (final r in (j['routes'] as List? ?? [])) AiRoute.fromJson(Map<String, dynamic>.from(r as Map))],
         feeds: [for (final f in (j['feeds'] as List? ?? [])) FeedSource.fromJson(Map<String, dynamic>.from(f as Map))],
+        variants: j['variants'] is List
+            ? [for (final v in j['variants'] as List) PromptVariant.fromJson(Map<String, dynamic>.from(v as Map))]
+            : ServerConfig.defaults().variants,
         maxTokens: (j['maxTokens'] ?? 900) as int,
+        imagesEnabled: (j['imagesEnabled'] ?? false) as bool,
         rateLimitPerMinute: (j['rateLimitPerMinute'] ?? 20) as int,
         globalAiPerMinute: (j['globalAiPerMinute'] ?? 120) as int,
         dailyAiLimit: (j['dailyAiLimit'] ?? 5000) as int,
         extraSystemPrompt: (j['extraSystemPrompt'] ?? '') as String,
       );
+    // Configs saved by older versions lack routes for newer tasks: let those
+    // tasks use the chat model so a server upgrade keeps working.
+    final saved = {for (final r in (j['routes'] as List? ?? [])) (r as Map)['task']};
+    final chat = c.route('chat');
+    for (final r in c.routes) {
+      if (!saved.contains(r.task) && r.task != 'image' && r.providerId.isEmpty) {
+        r
+          ..providerId = chat.providerId
+          ..model = chat.model;
+      }
+    }
+    return c;
+  }
 
   /// Applies an admin-panel update. A blank / masked `apiKey` keeps the stored key.
   void applyAdminUpdate(Map<String, dynamic> j) {
@@ -227,6 +288,15 @@ class ServerConfig {
         ..clear()
         ..addAll([for (final f in j['feeds'] as List) FeedSource.fromJson(Map<String, dynamic>.from(f as Map))]);
     }
+    if (j['variants'] is List) {
+      variants
+        ..clear()
+        ..addAll([
+          for (final v in j['variants'] as List)
+            if (v is Map && '${v['id'] ?? ''}'.trim().isNotEmpty) PromptVariant.fromJson(Map<String, dynamic>.from(v))
+        ]);
+    }
+    if (j['imagesEnabled'] is bool) imagesEnabled = j['imagesEnabled'] as bool;
     if (j['maxTokens'] is int) maxTokens = (j['maxTokens'] as int).clamp(64, 8000);
     if (j['rateLimitPerMinute'] is int) rateLimitPerMinute = (j['rateLimitPerMinute'] as int).clamp(1, 600);
     if (j['globalAiPerMinute'] is int) globalAiPerMinute = (j['globalAiPerMinute'] as int).clamp(1, 100000);
